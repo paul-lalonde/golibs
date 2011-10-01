@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package oauth
+/*
+	Package oauth1a implements the OAuth 1.0a specification.
+*/
+
+package oauth1a
 
 import (
 	"http"
@@ -30,16 +34,16 @@ import (
 
 // Container for client-specific configuration related to the OAuth process.
 // This struct is intended to be serialized and stored for future use.
-type OAuthConfig struct {
+type ClientConfig struct {
 	ConsumerSecret string
 	ConsumerKey    string
 	Callback       string
 }
 
-// Creates an OAuth config with minimal data suitable for starting an OAuth
+// Creates a client config with minimal data suitable for starting an OAuth
 // flow.
-func NewOAuthConfig(key string, secret string, callback string) *OAuthConfig {
-	return &OAuthConfig{
+func NewClientConfig(key string, secret string, callback string) *ClientConfig {
+	return &ClientConfig{
 		ConsumerSecret: secret,
 		ConsumerKey:    key,
 		Callback:       callback,
@@ -50,7 +54,7 @@ func NewOAuthConfig(key string, secret string, callback string) *OAuthConfig {
 // This struct is intended to be serialized and stored for future use.
 // Request and Access tokens are each stored separately, so that the current
 // position in the auth flow may be inferred.
-type OAuthUserConfig struct {
+type UserConfig struct {
 	RequestTokenSecret string
 	RequestTokenKey    string
 	AccessTokenSecret  string
@@ -62,7 +66,7 @@ type OAuthUserConfig struct {
 // Returns a token and secret corresponding to where in the OAuth flow this
 // config is currently in.  The priority is Access token, Request token, empty
 // string.
-func (c *OAuthUserConfig) GetToken() (string, string) {
+func (c *UserConfig) GetToken() (string, string) {
 	if c.AccessTokenKey != "" {
 		return c.AccessTokenKey, c.AccessTokenSecret
 	}
@@ -73,22 +77,20 @@ func (c *OAuthUserConfig) GetToken() (string, string) {
 }
 
 // Represents an API which offers OAuth access.
-type OAuthService struct {
+type Service struct {
 	RequestUrl   string
 	AuthorizeUrl string
 	AccessUrl    string
-	Config       *OAuthConfig
-	Signer       Signer
+	*ClientConfig
+	Signer
 }
 
 // Sign and send a Request using the current configuration.
-func (o *OAuthService) Send(request *Request, user *OAuthUserConfig, client *http.Client) (*http.Response, os.Error) {
-	o.Signer.Sign(request, o.Config, user)
-	httpRequest, err := request.GetHttpRequest()
-	if err != nil {
+func (s *Service) Send(request *http.Request, userConfig *UserConfig, client *http.Client) (*http.Response, os.Error) {
+	if err := s.Signer.Sign(request, s.ClientConfig, userConfig); err != nil {
 		return nil, err
 	}
-	response, err := client.Do(httpRequest)
+	response, err := client.Do(request)
 	if err != nil {
 		return nil, err
 	}
@@ -99,30 +101,31 @@ func (o *OAuthService) Send(request *Request, user *OAuthUserConfig, client *htt
 }
 
 // Issue a request to exchange the current request token for an access token.
-func (o *OAuthService) GetAccessToken(token string, verifier string, user *OAuthUserConfig, client *http.Client) os.Error {
-	if user.RequestTokenKey == "" || user.RequestTokenSecret == "" {
+func (s *Service) GetAccessToken(token string, verifier string, userConfig *UserConfig, client *http.Client) os.Error {
+	if userConfig.RequestTokenKey == "" || userConfig.RequestTokenSecret == "" {
 		return os.NewError("No configured request token")
 	}
-	if user.RequestTokenKey != token {
+	if userConfig.RequestTokenKey != token {
 		return os.NewError("Returned token did not match request token")
 	}
-	user.Verifier = verifier
-	params := map[string]string{
-		"oauth_verifier": verifier,
-	}
-	request := NewRequest("POST", o.AccessUrl, params, nil)
-	response, err := o.Send(request, user, client)
+	userConfig.Verifier = verifier
+	request, err := http.NewRequest("POST", s.AccessUrl, nil)
 	if err != nil {
 		return err
 	}
-	err = o.parseAccessToken(response, user)
+	request.Form.Add("oauth_verifier", verifier)
+	response, err := s.Send(request, userConfig, client)
+	if err != nil {
+		return err
+	}
+	err = s.parseAccessToken(response, userConfig)
 	return err
 }
 
 // Given the returned response from the access token request, pull out the
 // access token and token secret.  Store a copy of any other values returned,
 // too, since Twitter returns handy information such as the username.
-func (o *OAuthService) parseAccessToken(response *http.Response, user *OAuthUserConfig) os.Error {
+func (s *Service) parseAccessToken(response *http.Response, userConfig *UserConfig) os.Error {
 	defer response.Body.Close()
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
@@ -134,39 +137,40 @@ func (o *OAuthService) parseAccessToken(response *http.Response, user *OAuthUser
 	if tokenKey == "" || tokenSecret == "" {
 		return os.NewError("No token or secret found")
 	}
-	user.AccessTokenKey = tokenKey
-	user.AccessTokenSecret = tokenSecret
-	user.AccessValues = params
+	userConfig.AccessTokenKey = tokenKey
+	userConfig.AccessTokenSecret = tokenSecret
+	userConfig.AccessValues = params
 	return nil
 }
 
 // Obtain a URL which will allow the current user to authorize access to their
 // OAuth-protected data.
-func (o *OAuthService) GetAuthorizeUrl(user *OAuthUserConfig) (string, os.Error) {
-	if user.RequestTokenKey == "" || user.RequestTokenSecret == "" {
+func (s *Service) GetAuthorizeUrl(userConfig *UserConfig) (string, os.Error) {
+	if userConfig.RequestTokenKey == "" || userConfig.RequestTokenSecret == "" {
 		return "", os.NewError("No configured request token")
 	}
-	token := http.URLEscape(user.RequestTokenKey)
-	return o.AuthorizeUrl + "?oauth_token=" + token, nil
+	token := http.URLEscape(userConfig.RequestTokenKey)
+	return s.AuthorizeUrl + "?oauth_token=" + token, nil
 }
 
 // Issue a request to obtain a Request token.
-func (o *OAuthService) GetRequestToken(user *OAuthUserConfig, client *http.Client) os.Error {
-	params := map[string]string{
-		"oauth_callback": o.Config.Callback,
-	}
-	request := NewRequest("POST", o.RequestUrl, params, nil)
-	response, err := o.Send(request, user, client)
+func (s *Service) GetRequestToken(userConfig *UserConfig, client *http.Client) os.Error {
+	request, err := http.NewRequest("POST", s.RequestUrl, nil)
 	if err != nil {
 		return err
 	}
-	err = o.parseRequestToken(response, user)
+	request.Form.Add("oauth_callback", s.ClientConfig.Callback)
+	response, err := s.Send(request, userConfig, client)
+	if err != nil {
+		return err
+	}
+	err = s.parseRequestToken(response, userConfig)
 	return err
 }
 
 // Given the returned response from a Request token request, parse out the
 // appropriate request token and secret fields.
-func (o *OAuthService) parseRequestToken(response *http.Response, user *OAuthUserConfig) os.Error {
+func (s *Service) parseRequestToken(response *http.Response, userConfig *UserConfig) os.Error {
 	defer response.Body.Close()
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
@@ -178,8 +182,8 @@ func (o *OAuthService) parseRequestToken(response *http.Response, user *OAuthUse
 	if tokenKey == "" || tokenSecret == "" {
 		return os.NewError("No token or secret found")
 	}
-	user.RequestTokenKey = tokenKey
-	user.RequestTokenSecret = tokenSecret
+	userConfig.RequestTokenKey = tokenKey
+	userConfig.RequestTokenSecret = tokenSecret
 	if params.Get("oauth_callback_confirmed") == "false" {
 		return os.NewError("OAuth callback not confirmed")
 	}
@@ -188,7 +192,7 @@ func (o *OAuthService) parseRequestToken(response *http.Response, user *OAuthUse
 
 // Interface for any OAuth signing implementations.
 type Signer interface {
-	Sign(request *Request, config *OAuthConfig, user *OAuthUserConfig)
+	Sign(request *http.Request, config *ClientConfig, user *UserConfig) os.Error
 }
 
 // A Signer which implements the HMAC-SHA1 signing algorithm.
@@ -196,15 +200,16 @@ type HmacSha1Signer struct{}
 
 // Given an unsigned request, add the appropriate OAuth Authorization header
 // using the HMAC-SHA1 algorithm.
-func (s *HmacSha1Signer) Sign(request *Request, config *OAuthConfig, user *OAuthUserConfig) {
+func (s *HmacSha1Signer) Sign(request *http.Request, clientConfig *ClientConfig, userConfig *UserConfig) os.Error {
+	request.ParseForm()
 	oauthParams := map[string]string{
-		"oauth_consumer_key":     config.ConsumerKey,
+		"oauth_consumer_key":     clientConfig.ConsumerKey,
 		"oauth_nonce":            s.generateNonce(),
 		"oauth_signature_method": "HMAC-SHA1",
 		"oauth_timestamp":        fmt.Sprintf("%v", time.Seconds()),
 		"oauth_version":          "1.0",
 	}
-	tokenKey, tokenSecret := user.GetToken()
+	tokenKey, tokenSecret := userConfig.GetToken()
 	if tokenKey != "" {
 		oauthParams["oauth_token"] = tokenKey
 	}
@@ -212,15 +217,21 @@ func (s *HmacSha1Signer) Sign(request *Request, config *OAuthConfig, user *OAuth
 	for key, value := range oauthParams {
 		signingParams[key] = value
 	}
-	for key, value := range request.Parameters {
-		signingParams[key] = value
+	for key, value := range request.URL.Query() {
+		//TODO: Support multiple parameters with the same name.
+		signingParams[key] = value[0]
 	}
+	for key, value := range request.Form {
+		//TODO: Support multiple parameters with the same name.
+		signingParams[key] = value[0]
+	}
+	signingUrl := fmt.Sprintf("%v://%v%v", request.URL.Scheme, request.URL.RawAuthority, request.URL.Path)
 	signatureParts := []string{
 		request.Method,
-		http.URLEscape(request.Url),
+		http.URLEscape(signingUrl),
 		s.encodeParameters(signingParams)}
 	signatureBase := strings.Join(signatureParts, "&")
-	signingKey := config.ConsumerSecret + "&" + tokenSecret
+	signingKey := clientConfig.ConsumerSecret + "&" + tokenSecret
 	signer := hmac.NewSHA1([]byte(signingKey))
 	signer.Write([]byte(signatureBase))
 	oauthSignature := base64.StdEncoding.EncodeToString(signer.Sum())
@@ -233,7 +244,8 @@ func (s *HmacSha1Signer) Sign(request *Request, config *OAuthConfig, user *OAuth
 	}
 
 	oauthHeader := "OAuth " + strings.Join(headerParts, ", ")
-	request.Headers["Authorization"] = oauthHeader
+	request.Header["Authorization"] = []string{oauthHeader}
+	return nil
 }
 
 // Sort a set of request parameters alphabetically, and encode according to the

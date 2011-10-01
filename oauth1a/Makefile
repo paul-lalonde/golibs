@@ -14,9 +14,9 @@
 
 include $(GOROOT)/src/Make.inc
 
-TARG=github.com/kurrik/oauthgo
+TARG=github.com/kurrik/golibs/oauth1a
 GOFILES=\
-	oauth.go\
+	oauth1a.go\
 
 include $(GOROOT)/src/Make.pkg
 
