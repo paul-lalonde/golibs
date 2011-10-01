@@ -37,17 +37,7 @@ import (
 type ClientConfig struct {
 	ConsumerSecret string
 	ConsumerKey    string
-	Callback       string
-}
-
-// Creates a client config with minimal data suitable for starting an OAuth
-// flow.
-func NewClientConfig(key string, secret string, callback string) *ClientConfig {
-	return &ClientConfig{
-		ConsumerSecret: secret,
-		ConsumerKey:    key,
-		Callback:       callback,
-	}
+	CallbackURL    string
 }
 
 // Container for user-specific keys and secrets related to the OAuth process.
@@ -78,9 +68,9 @@ func (c *UserConfig) GetToken() (string, string) {
 
 // Represents an API which offers OAuth access.
 type Service struct {
-	RequestUrl   string
-	AuthorizeUrl string
-	AccessUrl    string
+	RequestURL   string
+	AuthorizeURL string
+	AccessURL    string
 	*ClientConfig
 	Signer
 }
@@ -159,7 +149,7 @@ func (s *Service) GetRequestToken(userConfig *UserConfig, client *http.Client) o
 	if err != nil {
 		return err
 	}
-	request.Form.Add("oauth_callback", s.ClientConfig.Callback)
+	request.Form.Add("oauth_callback", s.ClientConfig.CallbackURL)
 	response, err := s.Send(request, userConfig, client)
 	if err != nil {
 		return err
