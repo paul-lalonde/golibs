@@ -17,6 +17,7 @@ include $(GOROOT)/src/Make.inc
 TARG=github.com/kurrik/golibs/oauth1a
 GOFILES=\
 	oauth1a.go\
+	userconfig.go\
 
 include $(GOROOT)/src/Make.pkg
 

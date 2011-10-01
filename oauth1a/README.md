@@ -39,19 +39,26 @@ To obtain user credentials:
 
     httpClient := new(http.Client)
     userConfig := &oauth1a.UserConfig{}
-    service.GetRequestToken(userConfig, httpClient)
-    url, _ := service.GetAuthorizeUrl(userConfig)
+    userConfig.GetRequestToken(service, httpClient)
+    url, _ := userConfig.GetAuthorizeUrl(service)
     var token string
     var verifier string
     // Redirect the user to <url> and parse out token and verifier from the response.
-    service.GetAccessToken(token, verifier, userConfig, httpClient)
+    userConfig.GetAccessToken(token, verifier, service, httpClient)
+
+Or if you have existing credentials:
+
+    token := "<your access token>"
+    secret := "<your access token secret>"
+    userConfig := NewAuthorizedConfig(token, secret)
 
 To send an authenticated request:
 
-    httpRequest := http.NewRequest("GET", "https://api.twitter.com/1/account/verify_credentials", nil)
+    httpRequest, _ := http.NewRequest("GET", "https://api.twitter.com/1/account/verify_credentials.json", nil)
+    service.Sign(httpRequest, userConfig)
     var httpResponse *http.Response
-    var err os.Err
-    httpResponse, err = service.Send(httpRequest, userConfig, httpClient)
+    var err os.Error
+    httpResponse, err = httpClient.Do(httpRequest)
 
 
 
