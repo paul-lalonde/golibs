@@ -16,10 +16,10 @@ Clone this repository, then run:
 
     gotest
 
-in the oauth1a directory.
+in the `oauth1a` directory.
 
 ## Using
-The best bet will be to check `oauth1a_test` for usage.
+The best bet will be to check `oauth1a_test.go` for usage.
 
 As a vague example, here is code to configure the library for accessing Twitter:
 
