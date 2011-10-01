@@ -1,7 +1,8 @@
-# Summary
+# Package oauth1a
+## Summary
 An implementation of OAuth 1.0a in Go.
 
-# Installing
+## Installing
 Run:
 
     goinstall github.com/kurrik/golibs/oauth1a
@@ -10,14 +11,14 @@ Include in your source:
 
     import "github.com/kurrik/golibs/oauth1a"
 
-# Testing
+## Testing
 Clone this repository, then run:
 
     gotest
 
 in the oauth1a directory.
 
-# Using
+## Using
 The best bet will be to check `oauth1a_test` for usage.
 
 As a vague example, here is code to configure the library for accessing Twitter:
