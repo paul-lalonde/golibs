@@ -16,8 +16,35 @@ package oauth1a
 
 import (
 	"testing"
+	"http"
 )
 
-func TestNothing(t *testing.T) {
-	t.Fail()
+var user = NewAuthorizedConfig("token", "secret")
+
+var client = &ClientConfig{
+	ConsumerKey:    "consumer_key",
+	ConsumerSecret: "consumer_secret",
+	CallbackURL:    "https://example.com/callback",
+}
+
+var signer = new(HmacSha1Signer)
+
+var service = &Service{
+	RequestURL:   "https://example.com/request_token",
+	AuthorizeURL: "https://example.com/request_token",
+	AccessURL:    "https://example.com/request_token",
+	ClientConfig: client,
+	Signer:       signer,
+}
+
+func TestSignature(t *testing.T) {
+	url := "https://example.com/endpoint"
+	request, _ := http.NewRequest("GET", url, nil)
+	service.Sign(request, user)
+	params, _ := signer.GetOAuthParams(request, client, user, "nonce", "timestamp")
+	signature := params["oauth_signature"]
+	expected := "8+ZC6DP8FU3z50qSWDeYCGix2x0="
+	if signature != expected {
+		t.Errorf("Signature %v did not match expected %v", signature, expected)
+	}
 }

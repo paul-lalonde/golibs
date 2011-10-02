@@ -16,7 +16,21 @@ Clone this repository, then run:
 
     gotest
 
-in the `oauth1a` directory.
+in the `oauth1a` directory.  To run an integration test, create a file named
+CREDENTIALS in the library directory.  There should be four lines in this file,
+in the following format:
+
+    <Twitter consumer key>
+    <Twitter consumer secret>
+    <Twitter access token>
+    <Twitter access token secret>
+
+Then run:
+
+    gotest -file oauth1a_test_integration.go
+
+This will run an integration test against the Twitter
+`/account/verify_credentials.json` endpoint.
 
 ## Using
 The best bet will be to check `oauth1a_test.go` for usage.

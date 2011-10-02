@@ -102,6 +102,24 @@ func (c *UserConfig) GetAuthorizeURL(service *Service) (string, os.Error) {
 	return service.AuthorizeURL + "?oauth_token=" + token, nil
 }
 
+// Parses an access token and verifier from a redirected authorize reqeust.
+func (c *UserConfig) ParseAuthorize(request *http.Request, service *Service) (string, string, os.Error) {
+	request.ParseForm()
+	urlParts := request.URL.Query()
+	token := urlParts.Get("oauth_token")
+	verifier := urlParts.Get("oauth_verifier")
+	if token == "" {
+		token = request.Form.Get("oauth_token")
+	}
+	if verifier == "" {
+		verifier = request.Form.Get("oauth_verifier")
+	}
+	if token == "" || verifier == "" {
+		return "", "", os.NewError("Token or verifier were missing from response")
+	}
+	return token, verifier, nil
+}
+
 // Issue a request to exchange the current request token for an access token.
 func (c *UserConfig) GetAccessToken(token string, verifier string, service *Service, client *http.Client) os.Error {
 	if c.RequestTokenKey == "" || c.RequestTokenSecret == "" {
@@ -158,5 +176,3 @@ func (c *UserConfig) GetToken() (string, string) {
 	}
 	return "", ""
 }
-
-

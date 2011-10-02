@@ -60,15 +60,45 @@ type Signer interface {
 // A Signer which implements the HMAC-SHA1 signing algorithm.
 type HmacSha1Signer struct{}
 
-// Given an unsigned request, add the appropriate OAuth Authorization header
-// using the HMAC-SHA1 algorithm.
-func (s *HmacSha1Signer) Sign(request *http.Request, clientConfig *ClientConfig, userConfig *UserConfig) os.Error {
+// Sort a set of request parameters alphabetically, and encode according to the
+// OAuth 1.0a specification.
+func (HmacSha1Signer) encodeParameters(params map[string]string) string {
+	keys := make([]string, len(params))
+	encodedParts := make([]string, len(params))
+	i := 0
+	for key, _ := range params {
+		keys[i] = key
+		i += 1
+	}
+	sort.Strings(keys)
+	for i, key := range keys {
+		value := params[key]
+		encoded := Rfc3986Escape(key) + "=" + Rfc3986Escape(value)
+		encodedParts[i] = encoded
+	}
+	return http.URLEscape(strings.Join(encodedParts, "&"))
+}
+
+// Generate a unique nonce value.  Should not be called more than once per
+// nanosecond
+// TODO: Come up with a better generation method.
+func (HmacSha1Signer) GenerateNonce() string {
+	ns := time.Nanoseconds()
+	token := "OAuth Client Lib" + string(ns)
+	h := sha1.New()
+	h.Write([]byte(token))
+	return fmt.Sprintf("%x", h.Sum())
+}
+
+// Returns a map of all of the oauth_* (including signature) parameters for the
+// given request, and the signature base string used to generate the signature.
+func (s *HmacSha1Signer) GetOAuthParams(request *http.Request, clientConfig *ClientConfig, userConfig *UserConfig, nonce string, timestamp string) (map[string]string, string) {
 	request.ParseForm()
 	oauthParams := map[string]string{
 		"oauth_consumer_key":     clientConfig.ConsumerKey,
-		"oauth_nonce":            s.generateNonce(),
+		"oauth_nonce":            nonce,
 		"oauth_signature_method": "HMAC-SHA1",
-		"oauth_timestamp":        fmt.Sprintf("%v", time.Seconds()),
+		"oauth_timestamp":        timestamp,
 		"oauth_version":          "1.0",
 	}
 	tokenKey, tokenSecret := userConfig.GetToken()
@@ -93,52 +123,35 @@ func (s *HmacSha1Signer) Sign(request *http.Request, clientConfig *ClientConfig,
 		http.URLEscape(signingUrl),
 		s.encodeParameters(signingParams)}
 	signatureBase := strings.Join(signatureParts, "&")
-	fmt.Println(signatureBase)
-	signingKey := clientConfig.ConsumerSecret + "&" + tokenSecret
+	oauthParams["oauth_signature"] = s.GetSignature(clientConfig.ConsumerSecret, tokenSecret, signatureBase)
+	return oauthParams, signatureBase
+}
+
+// Calculates the HMAC-SHA1 signature of a base string, given a consumer and
+// token secret.
+func (s *HmacSha1Signer) GetSignature(consumerSecret string, tokenSecret string, signatureBase string) string {
+	signingKey := consumerSecret + "&" + tokenSecret
 	signer := hmac.NewSHA1([]byte(signingKey))
 	signer.Write([]byte(signatureBase))
 	oauthSignature := base64.StdEncoding.EncodeToString(signer.Sum())
-	oauthParams["oauth_signature"] = oauthSignature
+	return oauthSignature
+}
+
+// Given an unsigned request, add the appropriate OAuth Authorization header
+// using the HMAC-SHA1 algorithm.
+func (s *HmacSha1Signer) Sign(request *http.Request, clientConfig *ClientConfig, userConfig *UserConfig) os.Error {
+	nonce := s.GenerateNonce()
+	timestamp := fmt.Sprintf("%v", time.Seconds())
+	oauthParams, _ := s.GetOAuthParams(request, clientConfig, userConfig, nonce, timestamp)
 	headerParts := make([]string, len(oauthParams))
 	var i = 0
 	for key, value := range oauthParams {
 		headerParts[i] = Rfc3986Escape(key) + "=\"" + Rfc3986Escape(value) + "\""
 		i += 1
 	}
-
 	oauthHeader := "OAuth " + strings.Join(headerParts, ", ")
 	request.Header["Authorization"] = []string{oauthHeader}
 	return nil
-}
-
-// Sort a set of request parameters alphabetically, and encode according to the
-// OAuth 1.0a specification.
-func (HmacSha1Signer) encodeParameters(params map[string]string) string {
-	keys := make([]string, len(params))
-	encodedParts := make([]string, len(params))
-	i := 0
-	for key, _ := range params {
-		keys[i] = key
-		i += 1
-	}
-	sort.Strings(keys)
-	for i, key := range keys {
-		value := params[key]
-		encoded := Rfc3986Escape(key) + "=" + Rfc3986Escape(value)
-		encodedParts[i] = encoded
-	}
-	return http.URLEscape(strings.Join(encodedParts, "&"))
-}
-
-// Generate a unique nonce value.  Should not be called more than once per
-// nanosecond
-// TODO: Come up with a better generation method.
-func (HmacSha1Signer) generateNonce() string {
-	ns := time.Nanoseconds()
-	token := "OAuth Client Lib" + string(ns)
-	h := sha1.New()
-	h.Write([]byte(token))
-	return fmt.Sprintf("%x", h.Sum())
 }
 
 // Characters which should not be escaped according to RFC 3986.
