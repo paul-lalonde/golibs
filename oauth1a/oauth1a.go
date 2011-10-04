@@ -28,6 +28,7 @@ import (
 	"os"
 	"encoding/base64"
 	"bytes"
+	"url"
 )
 
 // Container for client-specific configuration related to the OAuth process.
@@ -76,7 +77,7 @@ func (HmacSha1Signer) encodeParameters(params map[string]string) string {
 		encoded := Rfc3986Escape(key) + "=" + Rfc3986Escape(value)
 		encodedParts[i] = encoded
 	}
-	return http.URLEscape(strings.Join(encodedParts, "&"))
+	return url.QueryEscape(strings.Join(encodedParts, "&"))
 }
 
 // Generate a unique nonce value.  Should not be called more than once per
@@ -120,7 +121,7 @@ func (s *HmacSha1Signer) GetOAuthParams(request *http.Request, clientConfig *Cli
 	signingUrl := fmt.Sprintf("%v://%v%v", request.URL.Scheme, request.URL.RawAuthority, request.URL.Path)
 	signatureParts := []string{
 		request.Method,
-		http.URLEscape(signingUrl),
+		url.QueryEscape(signingUrl),
 		s.encodeParameters(signingParams)}
 	signatureBase := strings.Join(signatureParts, "&")
 	oauthParams["oauth_signature"] = s.GetSignature(clientConfig.ConsumerSecret, tokenSecret, signatureBase)

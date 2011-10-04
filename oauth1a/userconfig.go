@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"http"
 	"os"
+	"url"
 )
 
 // Container for user-specific keys and secrets related to the OAuth process.
@@ -30,7 +31,7 @@ type UserConfig struct {
 	AccessTokenSecret  string
 	AccessTokenKey     string
 	Verifier           string
-	AccessValues       http.Values
+	AccessValues       url.Values
 }
 
 // Creates a UserConfig object with existing access token credentials.  For
@@ -78,7 +79,7 @@ func (c *UserConfig) parseRequestToken(response *http.Response) os.Error {
 	if err != nil {
 		return err
 	}
-	params, err := http.ParseQuery(string(body))
+	params, err := url.ParseQuery(string(body))
 	tokenKey := params.Get("oauth_token")
 	tokenSecret := params.Get("oauth_token_secret")
 	if tokenKey == "" || tokenSecret == "" {
@@ -98,7 +99,7 @@ func (c *UserConfig) GetAuthorizeURL(service *Service) (string, os.Error) {
 	if c.RequestTokenKey == "" || c.RequestTokenSecret == "" {
 		return "", os.NewError("No configured request token")
 	}
-	token := http.URLEscape(c.RequestTokenKey)
+	token := url.QueryEscape(c.RequestTokenKey)
 	return service.AuthorizeURL + "?oauth_token=" + token, nil
 }
 
@@ -152,7 +153,7 @@ func (c *UserConfig) parseAccessToken(response *http.Response) os.Error {
 	if err != nil {
 		return err
 	}
-	params, err := http.ParseQuery(string(body))
+	params, err := url.ParseQuery(string(body))
 	tokenKey := params.Get("oauth_token")
 	tokenSecret := params.Get("oauth_token_secret")
 	if tokenKey == "" || tokenSecret == "" {
