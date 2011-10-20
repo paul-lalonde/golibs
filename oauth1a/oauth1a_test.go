@@ -48,3 +48,16 @@ func TestSignature(t *testing.T) {
 		t.Errorf("Signature %v did not match expected %v", signature, expected)
 	}
 }
+
+var ESCAPE_TESTS = map[string]string{
+	"Ā" : "%C4%80",
+        "㤹" : "%E3%A4%B9",
+}
+
+func TestEscaping(t *testing.T) {
+	for str, expected := range(ESCAPE_TESTS) {
+		if Rfc3986Escape(str) != expected {
+			t.Errorf("Escaped %v was %v, expected %v", str, Rfc3986Escape(str), expected)
+		}
+	}
+}
