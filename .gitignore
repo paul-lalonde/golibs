@@ -3,3 +3,4 @@ _test
 _*.go
 *.out
 CREDENTIALS
+_obj
